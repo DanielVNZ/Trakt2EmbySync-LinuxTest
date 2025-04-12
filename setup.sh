@@ -55,6 +55,11 @@ if [ "$MODE" == "web" ]; then
     # Run Streamlit web interface
     cd "${BASE_DIR}"
     streamlit run app.py
+elif [ "$MODE" == "all" ]; then
+    # Run both web interface and scheduler
+    cd "${BASE_DIR}"
+    streamlit run app.py &
+    python console_runner.py --mode "scheduler"
 else
     # Run console mode (scheduler, sync_once, or check_config)
     cd "${BASE_DIR}"
@@ -114,6 +119,25 @@ Environment=PYTHONUNBUFFERED=1
 WantedBy=multi-user.target
 EOL
 
+    # Combined service (both web and scheduler)
+    sudo tee /etc/systemd/system/trakt2embysync-all.service > /dev/null << EOL
+[Unit]
+Description=Trakt2EmbySync Complete (Web + Scheduler)
+After=network.target
+
+[Service]
+Type=simple
+User=$(whoami)
+WorkingDirectory=${BASE_DIR}
+ExecStart=${BASE_DIR}/run.sh all
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
     # Reload systemd
     sudo systemctl daemon-reload
 
@@ -123,7 +147,8 @@ EOL
     echo "1) Console runner only (background sync)"
     echo "2) Web UI only"
     echo "3) Both console runner and web UI"
-    echo "4) None (I'll enable them manually later)"
+    echo "4) Complete (Web + Scheduler)"
+    echo "5) None (I'll enable them manually later)"
     read -r service_choice
 
     case $service_choice in
@@ -147,10 +172,17 @@ EOL
             echo "   - sudo systemctl start trakt2embysync-web"
             echo "   The web interface will be available at http://localhost:8501"
             ;;
+        4)
+            sudo systemctl enable trakt2embysync-all.service
+            echo "✅ Complete service enabled. It will start automatically on boot."
+            echo "   You can manually start it with: sudo systemctl start trakt2embysync-all"
+            echo "   The web interface will be available at http://localhost:8501"
+            ;;
         *)
             echo "No services enabled. You can enable them later with:"
             echo "- sudo systemctl enable trakt2embysync.service"
             echo "- sudo systemctl enable trakt2embysync-web.service"
+            echo "- sudo systemctl enable trakt2embysync-all.service"
             ;;
     esac
 
@@ -174,6 +206,10 @@ EOL
                 sudo systemctl start trakt2embysync-web.service
                 echo "✅ Both services started. Web UI available at http://localhost:8501"
                 ;;
+            4)
+                sudo systemctl start trakt2embysync-all.service
+                echo "✅ Complete service started. Web UI available at http://localhost:8501"
+                ;;
             *)
                 echo "No services started."
                 ;;
@@ -190,4 +226,5 @@ echo "- Console mode: ./run.sh"
 echo "- Web interface: ./run.sh web"
 echo "- One-time sync: ./run.sh sync_once"
 echo "- Check config: ./run.sh check_config"
+echo "- Complete (Web + Scheduler): ./run.sh all"
 echo "=========================================="
